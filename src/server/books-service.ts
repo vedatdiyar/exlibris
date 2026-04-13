@@ -860,61 +860,10 @@ export async function listBooks(filters: ListBooksQuery): Promise<BookListRespon
     where: whereClause,
     orderBy: [desc(books.createdAt), asc(books.title)],
     limit: pageSize,
-    offset: (page - 1) * pageSize,
-    with: {
-      category: true,
-      publisher: true,
-      authors: {
-        with: {
-          author: true
-        }
-      },
-      series: {
-        with: {
-          series: true
-        }
-      }
-    }
+    offset: (page - 1) * pageSize
   });
 
-  // Build relations object for mapping (reusing existing mapper)
-  const relations: BookRelations = {
-    authorsByBookId: new Map(),
-    seriesByBookId: new Map(),
-    categoriesById: new Map(),
-    publishersById: new Map()
-  };
-
-  bookRows.forEach((row) => {
-    if (row.category) {
-      relations.categoriesById.set(row.category.id, row.category);
-      categoryCache.set(row.category.id, row.category);
-    }
-    if (row.publisher) {
-      const pubOpt = { id: row.publisher.id, name: row.publisher.name, slug: row.publisher.slug };
-      relations.publishersById.set(row.publisher.id, pubOpt);
-      publisherCache.set(row.publisher.id, pubOpt);
-    }
-    if (row.authors) {
-      relations.authorsByBookId.set(
-        row.id,
-        row.authors.map((ba) => ({
-          id: ba.author.id,
-          name: ba.author.name,
-          slug: ba.author.slug
-        }))
-      );
-    }
-    if (row.series) {
-      relations.seriesByBookId.set(row.id, {
-        id: row.series.series.id,
-        name: row.series.series.name,
-        slug: row.series.series.slug,
-        totalVolumes: row.series.series.totalVolumes,
-        seriesOrder: row.series.seriesOrder
-      });
-    }
-  });
+  const relations = await loadBookRelations(db, bookRows);
 
   return {
     items: bookRows.map((book) => mapBookListItem(book as any as BookRow, relations)),
@@ -936,59 +885,10 @@ export async function listRecentBooks(limit = 5) {
   const db = createDb();
   const bookRows = await db.query.books.findMany({
     orderBy: [desc(books.createdAt), asc(books.title)],
-    limit,
-    with: {
-      category: true,
-      publisher: true,
-      authors: {
-        with: {
-          author: true
-        }
-      },
-      series: {
-        with: {
-          series: true
-        }
-      }
-    }
+    limit
   });
 
-  const relations: BookRelations = {
-    authorsByBookId: new Map(),
-    seriesByBookId: new Map(),
-    categoriesById: new Map(),
-    publishersById: new Map()
-  };
-
-  bookRows.forEach((row) => {
-    if (row.category) relations.categoriesById.set(row.category.id, row.category);
-    if (row.publisher) {
-      relations.publishersById.set(row.publisher.id, {
-        id: row.publisher.id,
-        name: row.publisher.name,
-        slug: row.publisher.slug
-      });
-    }
-    if (row.authors) {
-      relations.authorsByBookId.set(
-        row.id,
-        row.authors.map((ba) => ({
-          id: ba.author.id,
-          name: ba.author.name,
-          slug: ba.author.slug
-        }))
-      );
-    }
-    if (row.series) {
-      relations.seriesByBookId.set(row.id, {
-        id: row.series.series.id,
-        name: row.series.series.name,
-        slug: row.series.series.slug,
-        totalVolumes: row.series.series.totalVolumes,
-        seriesOrder: row.series.seriesOrder
-      });
-    }
-  });
+  const relations = await loadBookRelations(db, bookRows);
 
   return bookRows.map((book) => mapBookListItem(book as any as BookRow, relations));
 }
